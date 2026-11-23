@@ -10,6 +10,9 @@ import { History, store, encodeShare, decodeShare } from './engine/store.js';
 import { PREFABS } from './engine/library.js';
 import { ALL_TEMPLATES, BLANK } from './engine/templates.js';
 import { sceneThumb } from './engine/thumbs.js';
+import { putAsset } from './engine/assets.js';
+import { downloadGLB, getToken, creditOf } from './engine/sketchfab.js';
+import * as blender from './engine/blender.js';
 import { toast } from './ui/ui.js';
 
 export const app = new Emitter();
@@ -92,7 +95,7 @@ export function createApp(stage) {
       const s = o.scale && o.scale !== 1 ? [o.scale, o.scale, o.scale] : undefined;
       const obj = doc.create(prefab, {
         pos: [x, pt.y, pt.z], params: o.params, colors: o.colors, finish: o.finish, name: o.name, scale: s,
-        rot: o.rot, physics: o.physics, motion: o.motion, glb: o.glb, silent: true,
+        rot: o.rot, physics: o.physics, motion: o.motion, glb: o.glb, asset: o.asset, credit: o.credit, silent: true,
       });
       objs.push(obj);
       const w = doc.bbox(obj).getSize(new THREE.Vector3()).x;
@@ -266,6 +269,14 @@ export function createApp(stage) {
 
   // ---------- tools / views ----------
   app.setTool = (t) => { vp.setTool(t); };
+  app.mode = 'editor'; // 'editor' | 'blender'
+  app.setMode = (m) => {
+    if (m === app.mode) return;
+    if (m === 'blender' && sim.state !== 'stopped') sim.stop();
+    app.mode = m;
+    app.emit('mode', m);
+    if (m === 'editor') requestAnimationFrame(() => vp.resize());
+  };
   app.setBlueprint = (on) => {
     if (on) {
       app._preBp = vp.getCameraState();
@@ -325,11 +336,42 @@ export function createApp(stage) {
   };
 
   // ---------- export / import ----------
-  const exportRoot = () => {
+  /** Lightweight copy of a node tree for exporting: shares geometry, skips helpers, gives parts readable names. */
+  const exportCopy = (o, nodeName) => {
+    if (!o.visible || o.userData.bp || o.isSprite) return null;
+    const n = o.userData.n;
+    const name = n ? n.name : nodeName;
+    let c;
+    if (o.isMesh) {
+      c = new THREE.Mesh(o.geometry, o.material);
+      const slot = o.material?.userData?.slot;
+      if (slot && !o.material.name) o.material.name = `${nodeName}_${slot}`;
+      c.name = slot ? `${nodeName}_${slot}` : o.name || nodeName;
+    } else {
+      c = new THREE.Group();
+      c.name = n ? n.name : o.name === '__content' ? `${nodeName}_parts` : o.name || '';
+    }
+    c.position.copy(o.position); c.quaternion.copy(o.quaternion); c.scale.copy(o.scale);
+    o.children.forEach((ch) => { const cc = exportCopy(ch, name); if (cc) c.add(cc); });
+    return c;
+  };
+  /** Export root for all visible nodes, or for `objs`. With `world`, objects keep their world placement. */
+  const exportRoot = (objs) => {
     const root = new THREE.Group();
-    doc.root.children.forEach((c) => { if (c.visible) root.add(c.clone(true)); });
-    root.traverse((o) => { if (o.userData.bp) o.visible = false; });
+    (objs || doc.childNodes(doc.root)).forEach((o) => {
+      const c = exportCopy(o, o.userData.n?.name || 'Part');
+      if (!c) return;
+      if (objs) { o.updateWorldMatrix(true, false); o.matrixWorld.decompose(c.position, c.quaternion, c.scale); }
+      root.add(c);
+    });
+    root.updateMatrixWorld(true);
     return root;
+  };
+  /** Binary glTF of the scene (or just the selection). */
+  app.buildGLB = (selectionOnly = false) => {
+    const objs = selectionOnly ? app.selectedTop() : null;
+    if (selectionOnly && !objs.length) throw new Error('Select something first');
+    return new GLTFExporter().parseAsync(exportRoot(objs), { binary: true, onlyVisible: true });
   };
   const stripBlueprint = (root) => {
     const kill = [];
@@ -388,15 +430,83 @@ export function createApp(stage) {
         app.emit('opened');
         toast(`Opened “${json.meta?.name || file.name}”`);
       } else if (lower.endsWith('.glb') || lower.endsWith('.gltf')) {
-        const buf = new Uint8Array(await file.arrayBuffer());
-        let bin = '';
-        for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-        app.add('imported', { glb: btoa(bin), name: file.name.replace(/\.[^.]+$/, ''), params: { fit: 2.5 } });
+        await app.importModel(await file.arrayBuffer(), { name: file.name.replace(/\.[^.]+$/, ''), source: 'file' });
         toast('Model imported');
       } else throw new Error('Use a .glb, .gltf or BuildAnything .json file');
     } catch (e) {
       toast(e.message || 'Import failed', 'err');
     }
+  };
+
+  /** Store model bytes and add them to the scene as an imported model. */
+  app.importModel = async (buffer, { name, source = 'file', credit, thumb, uid, fit = 2.5, point } = {}) => {
+    const key = await putAsset({ name, source, credit, thumb, uid }, buffer);
+    const obj = app.add('imported', { asset: key, name, credit, point, params: { fit } });
+    app.emit('assets');
+    return obj;
+  };
+
+  /** Re-add a model that is already in the browser's model store. */
+  app.addStoredModel = (m, point) => app.add('imported', { asset: m.key, name: m.name, credit: m.credit, point, params: { fit: m.fit ?? 2.5 } });
+
+  /** Download a free Sketchfab model with the user's API token and add it, keeping its credit. */
+  app.importSketchfab = async (model, onProgress) => {
+    const buf = await downloadGLB(model.uid, getToken(), onProgress);
+    const obj = await app.importModel(buf, { name: model.name, source: 'sketchfab', uid: model.uid, thumb: model.thumb, credit: creditOf(model) });
+    return obj;
+  };
+
+  /** Everything in the scene that needs attribution. */
+  app.credits = () => {
+    const out = new Map();
+    doc.nodes.forEach((o) => { const c = o.userData.n.credit; if (c) out.set(c.url || c.title, c); });
+    return [...out.values()];
+  };
+
+  // ---------- Blender bridge ----------
+  app.blender = { lastSent: [], lastSentAll: false };
+  app.sendToBlender = async ({ selectionOnly = false, replace = true } = {}) => {
+    const glb = await app.buildGLB(selectionOnly);
+    const res = await blender.sendGLB(glb, { replace });
+    app.blender.lastSent = selectionOnly ? app.selectedTop().map((o) => o.userData.n.id) : [];
+    app.blender.lastSentAll = !selectionOnly;
+    return { ...res, bytes: glb.byteLength };
+  };
+  app.bringFromBlender = async ({ selectedOnly = false, replaceSent = false } = {}) => {
+    if (!app.editable()) return null;
+    const buf = await blender.fetchGLB({ selected: selectedOnly });
+    const name = selectedOnly ? 'Blender selection' : 'Blender scene';
+    if (replaceSent) {
+      const ids = app.blender.lastSentAll ? doc.childNodes(doc.root).map((o) => o.userData.n.id) : app.blender.lastSent;
+      const alive = ids.filter((id) => doc.nodes.has(id));
+      if (alive.length) doc.remove(alive);
+    }
+    // fit 0 keeps Blender's own size and placement, so edits land exactly where the originals were
+    const obj = await app.importModel(buf, { name, source: 'blender', fit: 0, point: new THREE.Vector3(0, 0, 0) });
+    if (obj) { obj.position.set(0, 0, 0); app.commit(); }
+    return { bytes: buf.byteLength };
+  };
+
+  // ---------- projects ----------
+  /** Delete a saved project. Deleting the open one switches to the most recent other project (or a blank canvas). */
+  app.deleteProject = (id) => {
+    const wasCurrent = id === doc.meta.id;
+    if (wasCurrent) clearTimeout(app._saveT); // don't let a pending autosave resurrect it
+    store.remove(id);
+    if (wasCurrent) {
+      const next = store.list()[0];
+      if (next) app.openProject(next.id);
+      else app.newProject(BLANK);
+    }
+    app.emit('projects');
+  };
+  app.duplicateProject = () => {
+    doc.camera = vp.getCameraState();
+    const json = doc.toJSON();
+    json.meta = { ...json.meta, id: newId(), name: `${doc.meta.name} copy` };
+    store.save(json, '');
+    app.openProject(json.meta.id);
+    toast('Project duplicated');
   };
 
   app.shareLink = async () => {
@@ -417,7 +527,7 @@ export function createApp(stage) {
   window.addEventListener('keydown', (e) => {
     const tag = (e.target.tagName || '').toLowerCase();
     if (['input', 'textarea', 'select'].includes(tag) || e.target.isContentEditable) return;
-    if (document.querySelector('.scrim')) return;
+    if (document.querySelector('.scrim') || app.mode !== 'editor') return;
     const mod = e.ctrlKey || e.metaKey;
     const k = e.key.toLowerCase();
     const simOn = sim.state !== 'stopped';

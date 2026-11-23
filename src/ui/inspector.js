@@ -155,6 +155,13 @@ export function mountInspector(el) {
     const out = [];
     out.push(h('div', { class: 'sec-title' }, icon(iconForPrefab(def), 16), h('span', { class: 'grow', title: n.name }, n.name), h('span', { class: 'tag' }, def.name)));
 
+    if (n.credit) {
+      const c = n.credit;
+      out.push(h('div', { class: 'credit-box' }, h('b', null, c.title), ' by ', c.authorUrl ? h('a', { href: c.authorUrl, target: '_blank', rel: 'noopener' }, c.author) : c.author,
+        h('br'), c.license, ' · ', h('a', { href: c.url, target: '_blank', rel: 'noopener' }, `View on ${c.source || 'Sketchfab'}`)));
+    }
+    if (n.missing) out.push(h('div', { class: 'credit-box', style: { color: '#ffd98a' } }, 'This model’s file isn’t stored in this browser (it was imported on another device). Import it again to restore it.'));
+
     // gizmo mode
     const modes = h('div', { class: 'mode-row' },
       ...[['translate', 'Move', 'move'], ['rotate', 'Rotate', 'rotate'], ['scale', 'Scale', 'scale']].map(([m, l, ic]) => h('button', { class: `btn sm ${vp.mode === m ? 'primary' : ''}`, onclick: () => { vp.setMode(m); render(); } }, icon(ic, 14), l)),

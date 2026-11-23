@@ -21,6 +21,9 @@ Design houses, machines, vehicles, cities and spaces with a huge library of 3D c
 - **AI Generate** — type a prompt (“red sports car”, “three pine trees”, “plants in pots”) to get variants in five styles. It runs locally by matching your words to the component library, so it works offline.
 - **Templates & community** — a workspace room, tiny house, city block, gear machine and physics playground, plus featured showcase scenes. Publish your own designs to a local shelf.
 - **Share & export** — share links (the scene is encoded in the URL, no server), PNG, GLB, glTF, OBJ, STL and scene JSON. Import `.glb`/`.gltf` and scene files.
+- **Sketchfab library** — *Library → Sketchfab* searches Sketchfab's free, downloadable models (paid Store models are never shown) with filters for category, license, polygon count and sort. Importing needs your own [Sketchfab API token](https://sketchfab.com/settings/password); the model's author and license are saved automatically (*Export → Credits & licenses*). Imported models are kept in *Library → My models*.
+- **Blender tab** — send your scene (or a selection) to the Blender running on your computer, edit it with the full Blender toolset, and bring it back at the same size and position. Blender can't run inside a web page, so this uses a small bridge script ([`public/blender/buildanything_bridge.py`](public/blender/buildanything_bridge.py)) that listens only on `127.0.0.1` and only accepts requests from BuildAnything. Tested with Blender 5.2.
+- **Project management** — rename, duplicate and delete projects (always-visible delete buttons with confirmation, plus *Delete all*).
 - **Frame, comments, text labels, sun/lighting controls**, auto-save to the browser.
 
 ## Run it

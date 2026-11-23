@@ -65,6 +65,20 @@ export function modal(title, body, { small = false, headRight, onClose, classNam
   return { close, el: scrim };
 }
 
+/** Promise-based confirmation dialog (replaces window.confirm). Resolves true when confirmed. */
+export function confirmDialog({ title, message, confirmLabel = 'Confirm', danger = false, cancelLabel = 'Cancel' }) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (done) return; done = true; m.close(); resolve(v); };
+    const ok = h('button', { class: `btn ${danger ? 'destructive' : 'primary'}`, onclick: () => finish(true) }, confirmLabel);
+    const m = modal(title, h('div', { class: 'confirm-body' },
+      h('p', null, message),
+      h('div', { class: 'confirm-actions' }, h('button', { class: 'btn', onclick: () => finish(false) }, cancelLabel), ok)),
+    { small: true, onClose: () => finish(false) });
+    setTimeout(() => ok.focus(), 30);
+  });
+}
+
 export function toast(msg, kind = 'ok') {
   const root = document.getElementById('toasts');
   const t = h('div', { class: `toast ${kind === 'err' ? 'err' : ''}` }, icon(kind === 'err' ? 'alert' : 'check', 16), msg);

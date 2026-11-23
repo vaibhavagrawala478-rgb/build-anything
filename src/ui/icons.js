@@ -5,7 +5,7 @@ import {
   Building, Trees, Armchair, Orbit, Shapes, LayoutGrid, Ruler, FileText, Image, Cuboid, House, Check, Link, Pencil, Zap, Circle,
   Triangle, Cylinder, Package, Shuffle, Save, FolderOpen, FilePlus, CircleAlert, Frame, Film, Move, RefreshCw, Keyboard,
   Users, UserPlus, SquareDashed, PencilRuler, Blocks, ArrowDownToLine, Boxes, Palette, Info, Minus, ZoomIn, ZoomOut, PanelLeft,
-  PanelRight, ChevronUp, Rocket, Flower2, Component, Layers, Globe, Hand, Maximize2, Crop,
+  PanelRight, ChevronUp, Rocket, Flower2, Component, Layers, Globe, Hand, Maximize2, Crop, Ellipsis, ExternalLink, ScrollText,
 } from 'lucide';
 
 const MAP = {
@@ -20,7 +20,7 @@ const MAP = {
   alert: CircleAlert, frame: Frame, film: Film, 'move-h': Move, refresh: RefreshCw, keyboard: Keyboard, users: Users, 'user-plus': UserPlus,
   dashed: SquareDashed, blueprint: PencilRuler, blocks: Blocks, floor: ArrowDownToLine, boxes: Boxes, palette: Palette, info: Info, minus: Minus,
   'zoom-in': ZoomIn, 'zoom-out': ZoomOut, 'panel-left': PanelLeft, 'panel-right': PanelRight, rocket: Rocket, flower: Flower2, component: Component,
-  layers: Layers, globe: Globe, hand: Hand, expand: Maximize2, crop: Crop,
+  layers: Layers, globe: Globe, hand: Hand, expand: Maximize2, crop: Crop, more: Ellipsis, external: ExternalLink, credits: ScrollText,
 };
 
 /** Create an inline SVG icon element. */

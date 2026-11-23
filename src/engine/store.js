@@ -103,7 +103,7 @@ async function pipe(bytes, stream) {
 }
 
 export async function encodeShare(json) {
-  const slim = { ...json, nodes: json.nodes.filter((n) => !n.glb) }; // keep links short: imported meshes aren't shared
+  const slim = { ...json, nodes: json.nodes.filter((n) => !n.glb && !n.asset) }; // keep links short: imported meshes aren't shared
   const bytes = new TextEncoder().encode(JSON.stringify(slim));
   const z = await pipe(bytes, new CompressionStream('deflate-raw'));
   return b64u.enc(z);

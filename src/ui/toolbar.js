@@ -37,6 +37,7 @@ export function mountToolbar(stage) {
     { label: 'STL (3D printing)', icon: 'cog', onClick: () => app.export('stl') },
     { section: 'Project' },
     { label: 'Scene file (.json)', icon: 'file', onClick: () => app.export('json') },
+    { label: 'Credits & licenses', icon: 'credits', onClick: () => app.emit('openCredits') },
   ], { align: 'right' }) }, 'Export');
   const toolbar = h('div', { class: 'toolbar' }, undo, redo, h('span', { class: 'vsep' }), zoom, h('span', { class: 'vsep hide-sm' }), tText, tDraw, tLib, tAi, tSel, tCom, h('span', { class: 'vsep' }), tFit, exportBtn);
 

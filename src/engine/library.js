@@ -26,7 +26,7 @@ export const LIST = all;
 
 /** Group / imported pseudo-prefabs (no procedural builder). */
 PREFABS.group = { id: 'group', name: 'Group', cat: 'Utility', slots: {}, params: {}, kw: [], build() {} };
-PREFABS.imported = { id: 'imported', name: 'Imported model', cat: 'Utility', slots: {}, params: { fit: { v: 2.5, min: 0.2, max: 40, step: 0.1, label: 'Size (m)' } }, kw: [], build() {} };
+PREFABS.imported = { id: 'imported', name: 'Imported model', cat: 'Utility', slots: {}, params: { fit: { v: 2.5, min: 0, max: 40, step: 0.1, label: 'Size (m, 0 = original)' } }, kw: [], build() {} };
 
 export const defaultParams = (def) => Object.fromEntries(Object.entries(def.params || {}).map(([k, v]) => [k, v.v]));
 export const defaultColors = (def) => Object.fromEntries(Object.entries(def.slots || {}).map(([k, v]) => [k, v.c]));

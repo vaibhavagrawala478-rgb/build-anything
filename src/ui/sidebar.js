@@ -3,6 +3,7 @@ import { PREFABS } from '../engine/library.js';
 import { h, clear } from './dom.js';
 import { icon, iconForPrefab } from './icons.js';
 import { menu } from './ui.js';
+import { confirmDeleteProject } from './dialogs.js';
 
 export function mountSidebar(el) {
   const { doc, vp } = app;
@@ -14,9 +15,18 @@ export function mountSidebar(el) {
   const nameInput = h('input', { type: 'text', value: doc.meta.name, 'aria-label': 'Project name',
     onchange: (e) => app.rename(e.target.value), onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); } });
   const saveDot = h('span', { class: 'dim', style: { fontSize: '11px', paddingRight: '4px', whiteSpace: 'nowrap' } });
+  const moreBtn = h('button', { class: 'icon-btn', title: 'Project options', 'aria-label': 'Project options', style: { width: '30px', height: '30px' },
+    onclick: (e) => menu(e.currentTarget, [
+      { label: 'Projects & templates', icon: 'folder-open', onClick: () => app.emit('openHome') },
+      { label: 'Rename', icon: 'pencil', onClick: () => { nameInput.focus(); nameInput.select(); } },
+      { label: 'Duplicate project', icon: 'copy', onClick: () => app.duplicateProject() },
+      { label: 'Credits & licenses', icon: 'credits', onClick: () => app.emit('openCredits') },
+      'sep',
+      { label: 'Delete project…', icon: 'trash', onClick: () => confirmDeleteProject(doc.meta.id, doc.meta.name) },
+    ], { align: 'right' }) }, icon('more', 18));
   const head = h('div', { class: 'proj-head' },
     h('button', { class: 'icon-btn', title: 'Projects & templates', onclick: () => app.emit('openHome') }, icon('arrow-left', 18)),
-    nameInput, saveDot);
+    nameInput, saveDot, moreBtn);
 
   const searchInput = h('input', { type: 'search', placeholder: 'Search', 'aria-label': 'Search scene', oninput: (e) => { query = e.target.value.trim().toLowerCase(); render(); } });
   const search = h('div', { class: 'search' }, icon('search', 15), searchInput);

@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Emitter } from './emitter.js';
 import { Builder } from './builder.js';
 import { PREFABS, defaultParams } from './library.js';
+import { getAsset } from './assets.js';
 
 let counter = 0;
 export const newId = () => 'n' + Date.now().toString(36) + (++counter).toString(36) + Math.random().toString(36).slice(2, 5);
@@ -10,15 +11,22 @@ export const newId = () => 'n' + Date.now().toString(36) + (++counter).toString(
 const r4 = (v) => Math.round(v * 10000) / 10000;
 const glbCache = new Map();
 
-function parseGLB(b64) {
-  const key = b64.length + b64.slice(0, 64) + b64.slice(-64);
+/** Parse a GLB held in the asset store (cached per key) or, for older scenes, inline base64. */
+function loadModel(n) {
+  const key = n.asset || (n.glb ? n.glb.length + n.glb.slice(0, 64) + n.glb.slice(-64) : null);
+  if (!key) return Promise.reject(new Error('no model'));
   if (!glbCache.has(key)) {
-    glbCache.set(key, new Promise((res, rej) => {
-      const bin = atob(b64);
-      const buf = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-      new GLTFLoader().parse(buf.buffer, '', (g) => res(g.scene), rej);
-    }));
+    const bytes = n.asset
+      ? getAsset(n.asset).then((b) => { if (!b) throw new Error('missing'); return b; })
+      : Promise.resolve((() => {
+        const bin = atob(n.glb);
+        const buf = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+        return buf.buffer;
+      })());
+    const p = bytes.then((buf) => new Promise((res, rej) => new GLTFLoader().parse(buf, '', (g) => res(g.scene), rej)));
+    p.catch(() => glbCache.delete(key));
+    glbCache.set(key, p);
   }
   return glbCache.get(key);
 }
@@ -66,6 +74,8 @@ export class Doc extends Emitter {
       mass: o.mass ?? 1,
       locked: !!o.locked,
       glb: o.glb,
+      asset: o.asset,
+      credit: o.credit,
     };
     obj.userData.n = n;
     obj.name = n.name;
@@ -90,15 +100,18 @@ export class Doc extends Emitter {
     }
     const b = new Builder(def, n.colors, n.finish);
     if (n.prefab === 'imported') {
-      if (n.glb) {
-        parseGLB(n.glb).then((scene) => {
+      if (n.asset || n.glb) {
+        loadModel(n).then((scene) => {
+          if (!obj.parent && !this.nodes.has(n.id)) return; // deleted while loading
           const c = scene.clone(true);
-          const box = new THREE.Box3().setFromObject(c);
-          const size = box.getSize(new THREE.Vector3());
-          const k = (n.params.fit || 2) / Math.max(size.x, size.y, size.z, 0.0001);
-          c.scale.multiplyScalar(k);
-          const b2 = new THREE.Box3().setFromObject(c);
-          c.position.set(-(b2.min.x + b2.max.x) / 2, -b2.min.y, -(b2.min.z + b2.max.z) / 2);
+          const fit = n.params.fit;
+          if (fit > 0) { // normalise: scale to `fit` metres, stand on the floor, centre on the origin
+            const box = new THREE.Box3().setFromObject(c);
+            const size = box.getSize(new THREE.Vector3());
+            c.scale.multiplyScalar(fit / Math.max(size.x, size.y, size.z, 0.0001));
+            const b2 = new THREE.Box3().setFromObject(c);
+            c.position.set(-(b2.min.x + b2.max.x) / 2, -b2.min.y, -(b2.min.z + b2.max.z) / 2);
+          } // fit === 0 keeps the file's own size and placement (used for Blender round trips)
           c.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
           const holder = new THREE.Group();
           holder.name = '__content';
@@ -107,7 +120,20 @@ export class Doc extends Emitter {
           obj.add(holder);
           obj.userData.content = holder;
           this.emit('rebuilt', obj);
-        }).catch(() => {});
+        }).catch(() => {
+          // model bytes are not available on this device: show a dashed placeholder instead of nothing
+          const g = new THREE.Group();
+          g.name = '__content';
+          const box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: '#8b5cf6', wireframe: true, transparent: true, opacity: 0.6 }));
+          box.position.y = 0.5;
+          box.userData.noPick = false;
+          g.add(box);
+          if (obj.userData.content) obj.remove(obj.userData.content);
+          obj.add(g);
+          obj.userData.content = g;
+          n.missing = true;
+          this.emit('rebuilt', obj);
+        });
       }
     } else if (n.prefab !== 'group') {
       def.build(b, n.params);
@@ -200,7 +226,7 @@ export class Doc extends Emitter {
     const c = this.create(n.prefab, {
       name: this.uniqueName(n.name.replace(/ \d+$/, '')),
       params: JSON.parse(JSON.stringify(n.params)), colors: { ...n.colors }, finish: n.finish,
-      motion: { ...n.motion }, physics: n.physics, mass: n.mass, glb: n.glb,
+      motion: { ...n.motion }, physics: n.physics, mass: n.mass, glb: n.glb, asset: n.asset, credit: n.credit,
       pos: obj.position.toArray(), rot: [obj.rotation.x, obj.rotation.y, obj.rotation.z], scale: obj.scale.toArray(),
       visible: obj.visible, parent: parentId, silent: true,
     });
@@ -291,7 +317,7 @@ export class Doc extends Emitter {
       id: n.id, name: n.name, prefab: n.prefab, params: n.params, colors: n.colors, finish: n.finish,
       motion: n.motion, physics: n.physics, mass: n.mass, locked: n.locked, visible: obj.visible,
       pos: obj.position.toArray().map(r4), rot: [obj.rotation.x, obj.rotation.y, obj.rotation.z].map(r4),
-      scale: obj.scale.toArray().map(r4), parent: parentId || undefined, glb: n.glb,
+      scale: obj.scale.toArray().map(r4), parent: parentId || undefined, glb: n.glb, asset: n.asset, credit: n.credit,
     });
     this.childNodes(obj).forEach((c) => this.serializeNode(c, out, n.id));
   }
