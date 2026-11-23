@@ -8,6 +8,8 @@
 
 Design houses, machines, vehicles, cities and spaces with a huge library of 3D components — right in the browser.
 
+**[Try it live → vaibhavagrawala478-rgb.github.io/build-anything](https://vaibhavagrawala478-rgb.github.io/build-anything/)**
+
 ## Features
 
 - **3D editor** — isometric/orthographic or perspective camera, soft shadows, move/rotate/scale gizmo, snapping, multi-select, groups, undo/redo, copy/paste, direct drag on the floor, hide/lock, drag-and-drop reordering in the scene tree.
@@ -26,7 +28,7 @@ Design houses, machines, vehicles, cities and spaces with a huge library of 3D c
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm run build    # production build in dist/
+npm run build    # production build in dist/ (relative paths, host anywhere)
 ```
 
 Press `?` in the app for all keyboard shortcuts.
